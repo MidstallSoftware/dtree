@@ -66,6 +66,8 @@ pub const NodeIterator = struct {
     reader: *const Self,
     pos: usize = 0,
     depth: usize = 0,
+    initPos: usize = 0,
+    minDepth: usize = 0,
 
     pub fn realPos(self: *const NodeIterator) usize {
         return self.pos + self.reader.hdr.off_dt_struct;
@@ -131,7 +133,7 @@ pub const NodeIterator = struct {
     }
 
     pub fn next(self: *NodeIterator) !?Node {
-        if (self.depth == 0 and self.pos > 0) return null;
+        if (self.depth == self.minDepth and self.pos > self.initPos) return null;
 
         return switch (try self.token()) {
             .beginNode => blk: {
@@ -273,17 +275,64 @@ pub fn writeDts(self: *const Self, writer: anytype) !void {
 
 pub fn find(self: *const Self, path: []const []const u8) ![]const u8 {
     var iter = self.nodeIterator();
+    var matchDepth: ?usize = null;
     while (try iter.next()) |node| {
         const depth = node.depth();
-        if (depth >= path.len) return error.NotFound;
+        if (depth >= path.len) continue;
 
         const name = node.name() orelse continue;
         const pathItem = path[depth];
 
         if (!std.mem.eql(u8, name, pathItem)) continue;
-        if ((depth + 1) == path.len) {
-            if (node == .prop) return node.prop.value;
-            return error.UnexpectedBeginOrEnd;
+
+        if (node == .begin) {
+            matchDepth = depth;
+        } else if (node == .end) {
+            if (matchDepth) |md| {
+                matchDepth = md - 1;
+            } else matchDepth = null;
+        }
+
+        if ((depth + 1) == path.len and matchDepth != null) {
+            if (matchDepth.? == (depth - 1)) {
+                if (node == .prop) return node.prop.value;
+                return error.UnexpectedBeginOrEnd;
+            }
+        }
+    }
+    return error.NotFound;
+}
+
+pub fn findLoose(self: *const Self, path: []const []const u8) ![]const u8 {
+    var iter = self.nodeIterator();
+    var matchDepth: ?usize = null;
+    while (try iter.next()) |node| {
+        const depth = node.depth();
+        if (depth >= path.len) continue;
+
+        const name = node.name() orelse continue;
+        const pathItem = path[depth];
+
+        const loose = (path.len - 1) == depth + 1;
+        if (loose) {
+            if (!std.mem.containsAtLeast(u8, name, 1, pathItem)) continue;
+        } else {
+            if (!std.mem.eql(u8, name, pathItem)) continue;
+        }
+
+        if (node == .begin) {
+            matchDepth = depth;
+        } else if (node == .end) {
+            if (matchDepth) |md| {
+                matchDepth = md - 1;
+            } else matchDepth = null;
+        }
+
+        if ((depth + 1) == path.len and matchDepth != null) {
+            if (matchDepth.? == (depth - 1)) {
+                if (node == .prop) return node.prop.value;
+                return error.UnexpectedBeginOrEnd;
+            }
         }
     }
     return error.NotFound;
