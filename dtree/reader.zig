@@ -6,7 +6,7 @@ const Self = @This();
 
 pub const Node = union(enum) {
     begin: Begin,
-    end: void,
+    end: End,
     prop: Prop,
 
     pub const Begin = struct {
@@ -22,6 +22,10 @@ pub const Node = union(enum) {
                 self.name,
             });
         }
+    };
+
+    pub const End = struct {
+        depth: usize,
     };
 
     pub const Prop = struct {
@@ -120,12 +124,12 @@ pub const NodeIterator = struct {
                 self.alignTo(u32);
                 break :blk .{ .begin = .{
                     .name = str,
-                    .depth = self.depth,
+                    .depth = self.depth - 1,
                 } };
             },
             .endNode => blk: {
                 self.depth -= 1;
-                break :blk .{ .end = {} };
+                break :blk .{ .end = .{ .depth = self.depth } };
             },
             .prop => blk: {
                 const prop = self.readStruct(types.Prop);
