@@ -24,11 +24,5 @@ pub fn main() !void {
     const fdt = try dtree.Reader.initFile(alloc, file);
     defer fdt.deinit();
 
-    std.debug.print("{}\n", .{fdt.hdr});
-
-    var iter = fdt.nodeIterator();
-    while (iter.next() catch |err| {
-        std.debug.print("{}\n", .{iter.realPos()});
-        return err;
-    }) |node| std.debug.print("{}\n", .{node});
+    try fdt.writeDts(std.io.getStdOut().writer());
 }

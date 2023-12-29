@@ -44,6 +44,22 @@ pub const Node = union(enum) {
             });
         }
     };
+
+    pub fn name(self: Node) ?[]const u8 {
+        return switch (self) {
+            .begin => |b| b.name,
+            .end => null,
+            .prop => |p| p.name,
+        };
+    }
+
+    pub fn depth(self: Node) usize {
+        return switch (self) {
+            .begin => |b| b.depth,
+            .end => |e| e.depth,
+            .prop => |p| p.depth,
+        };
+    }
 };
 
 pub const NodeIterator = struct {
@@ -223,4 +239,52 @@ pub fn deinit(self: *const Self) void {
 
 pub fn nodeIterator(self: *const Self) NodeIterator {
     return .{ .reader = self };
+}
+
+pub fn writeDts(self: *const Self, writer: anytype) !void {
+    var iter = self.nodeIterator();
+    while (try iter.next()) |node| {
+        for (0..(node.depth() * 2)) |_| try writer.writeByte(' ');
+
+        switch (node) {
+            .begin => |b| {
+                try writer.writeAll(if (b.name.len == 0) "/" else b.name);
+                try writer.writeAll(" {");
+            },
+            .end => {
+                try writer.writeAll("}");
+            },
+            .prop => |p| {
+                try writer.writeAll(p.name);
+                try writer.writeAll(" = <");
+
+                for (p.value, 0..) |c, i| {
+                    try writer.print("0x{x}", .{c});
+                    if (i + 1 < p.value.len) try writer.writeByte(' ');
+                }
+
+                try writer.writeByte('>');
+            },
+        }
+
+        try writer.writeByte('\n');
+    }
+}
+
+pub fn find(self: *const Self, path: []const []const u8) ![]const u8 {
+    var iter = self.nodeIterator();
+    while (try iter.next()) |node| {
+        const depth = node.depth();
+        if (depth >= path.len) return error.NotFound;
+
+        const name = node.name() orelse continue;
+        const pathItem = path[depth];
+
+        if (!std.mem.eql(u8, name, pathItem)) continue;
+        if ((depth + 1) == path.len) {
+            if (node == .prop) return node.prop.value;
+            return error.UnexpectedBeginOrEnd;
+        }
+    }
+    return error.NotFound;
 }
