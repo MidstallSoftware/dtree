@@ -55,6 +55,11 @@ pub const NodeIterator = struct {
         return (self.pos + self.reader.hdr.off_dt_struct) - @sizeOf(types.Header);
     }
 
+    pub fn alignTo(self: *NodeIterator, comptime T: type) void {
+        self.pos += @sizeOf(T) - 1;
+        self.pos &= ~@as(usize, @sizeOf(T) - 1);
+    }
+
     pub fn readBuffer(self: *NodeIterator, buf: []u8) void {
         var i: usize = 0;
         while (i < buf.len) : (i += 1) {
@@ -106,11 +111,13 @@ pub const NodeIterator = struct {
     }
 
     pub fn next(self: *NodeIterator) !?Node {
+        if (self.depth == 0 and self.pos > 0) return null;
+
         return switch (try self.token()) {
             .beginNode => blk: {
                 self.depth += 1;
                 const str = self.string();
-                self.pos += 3;
+                self.alignTo(u32);
                 break :blk .{ .begin = .{
                     .name = str,
                     .depth = self.depth,
@@ -124,6 +131,7 @@ pub const NodeIterator = struct {
                 const prop = self.readStruct(types.Prop);
                 const name = self.stringAt(prop.name);
                 const value = self.readBytes(prop.len);
+                self.alignTo(u32);
                 break :blk .{ .prop = .{
                     .depth = self.depth,
                     .name = name,
