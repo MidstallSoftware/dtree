@@ -7,7 +7,7 @@ pub fn build(b: *std.Build) void {
     const no_docs = b.option(bool, "no-docs", "skip installing documentation") orelse false;
 
     const dtree = b.addModule("dtree", .{
-        .source_file = .{ .path = b.pathFromRoot("dtree.zig") },
+        .root_source_file = .{ .path = b.pathFromRoot("dtree.zig") },
     });
 
     if (!no_tests) {
@@ -44,6 +44,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    exe_example.addModule("dtree", dtree);
+    exe_example.root_module.addImport("dtree", dtree);
     b.installArtifact(exe_example);
 }
